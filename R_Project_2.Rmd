@@ -52,7 +52,7 @@ data <- read_csv("dataset_1_diabetes.csv")
 
 -   **Клинические и биохимические показатели**: кровяное давление, ЧСС, уровень холестерола, триглицеридов, глюкозы, инсулина, hba1c
 
--   Также представлены сведения о рисказ развития диабета, типе заболевания и наличии диабета в целом.
+-   Также представлены сведения о рисках развития диабета, типе заболевания и наличии диабета в целом.
 
 # Проверка данных
 
@@ -105,11 +105,47 @@ typed_data %>%
   ggplot(aes(x = variables, y = scaled_values, fill = variables)) +
   geom_boxplot() +
   theme_bw() +
-  theme(axis.text.x = element_blank()) +
+  theme(axis.text.x = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 12),     # Smaller title
+        legend.key.size = unit(0.5, "cm")) +
   labs(y = "Z-standartized values", x = "")
 ```
 
 Ввиду разных масштабов имеющихся числовых данных было принято решение провести Z-стандартизацию значений для упрощения восприятия визуализации выбросов, представленной выше. 
+
+В глаза бросается самый высокий выброс в переменной `physical activity`, однако если посмотреть на его значение, то станет ясно, что этот пациент занимается физ. нагрузками около 12 часов в неделю, что может быть вполне реалистично. Этот выброс соответствует пациентке 39 лет, курящей и употребляющей алкоголь в среднем 5 раз в неделю, с индексом массы тела 29.9 и диагностированным диабетом.
+
+Остальные значения, оказавшиеся за пределами межквартильного размаха, также являются реалистичными.
+
+``` {r sports outlier, echo = F}
+typed_data[typed_data$physical_activity_minutes_per_week == 751, ] %>%
+  select("Age" = age, "Gender" = gender, "Smoking" = smoking_status, 
+         "Alcohol Consumption per Week"=alcohol_consumption_per_week, "Physical activity, min/week"=physical_activity_minutes_per_week, 
+          "Diagnosed Diabetes"=diagnosed_diabetes,  "Diabetes Stage"=diabetes_stage) %>%
+  flextable() %>%
+  align(align="center")
+```
+
+Таким образом, в имеющемся наборе данных не было обнаружен выбросов, похожих на ошибки наблюдений. 
+Мы проверили наличие отсутствующих значений и выбросов, а также привели все переменные к надлежащим типам данных. Можем ознакомиться с базовыми описательными статистиками и приступать к проверке гипотез.
+
+``` {r describe, echo = F}
+typed_data %>%
+  select(where(is.numeric)) %>%
+  describe() %>%
+  rownames_to_column("Variables") %>%
+  select(Variables, mean, sd, median, min, max) %>%
+  mutate(across(where(is.numeric), ~ round(., 2))) %>%
+  flextable()
+
+typed_data %>%
+  select(where(is.factor)) %>%
+  summary()
+  
+work_data <- typed_data           
+```
+
 
 # Проверка гипотез
 
