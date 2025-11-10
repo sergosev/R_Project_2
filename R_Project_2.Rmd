@@ -26,6 +26,7 @@ library(psych)
 library(tibble)
 library(car)
 library(readr)
+library(patchwork)
 
 data <- read_csv("dataset_1_diabetes.csv")
 ```
@@ -75,7 +76,8 @@ as.data.frame(sapply(data, class)) %>%
   flextable()
 ```
 
-Переменные, которые являются категориальными, оказались либо строковыми, либо численными. Перед приведением их к факторам убедимся, что среди категориальных данных нет ошибок или опечаток
+Переменные, которые являются категориальными, оказались либо строковыми, либо численными.
+Перед приведением их к факторам убедимся, что среди категориальных данных нет ошибок или опечаток
 
 ```{r data check, echo = F}
 sapply(data[c(2:7, 13:15, 30:31)], unique)
@@ -83,7 +85,7 @@ sapply(data[c(2:7, 13:15, 30:31)], unique)
 
 С данными все хорошо, спокойно присваиваем им факторный тип.
 
-``` {r factoring, echo = F}
+```{r factoring, echo = F}
 typed_data <- data %>%
   mutate(across(c(gender, ethnicity, education_level, income_level, employment_status, smoking_status, diabetes_stage),
          as.factor),
@@ -94,7 +96,7 @@ typed_data <- data %>%
 
 ## Работа с выбросами
 
-``` {r outliers 1, echo = F}
+```{r outliers 1, echo = F}
 typed_data %>%
   select(where(is.numeric)) %>%
   pivot_longer(cols = everything(), names_to = 'variables', values_to = 'values') %>%
@@ -112,13 +114,15 @@ typed_data %>%
   labs(y = "Z-standartized values", x = "")
 ```
 
-Ввиду разных масштабов имеющихся числовых данных было принято решение провести Z-стандартизацию значений для упрощения восприятия визуализации выбросов, представленной выше. 
+Ввиду разных масштабов имеющихся числовых данных было принято решение провести Z-стандартизацию значений для упрощения восприятия визуализации выбросов, представленной выше.
 
-В глаза бросается самый высокий выброс в переменной `physical activity`, однако если посмотреть на его значение, то станет ясно, что этот пациент занимается физ. нагрузками около 12 часов в неделю, что может быть вполне реалистично. Этот выброс соответствует пациентке 39 лет, курящей и употребляющей алкоголь в среднем 5 раз в неделю, с индексом массы тела 29.9 и диагностированным диабетом.
+В глаза бросается самый высокий выброс в переменной `physical activity`, однако если посмотреть на его значение, то станет ясно, что этот пациент занимается физ.
+нагрузками около 12 часов в неделю, что может быть вполне реалистично.
+Этот выброс соответствует пациентке 39 лет, курящей и употребляющей алкоголь в среднем 5 раз в неделю, с индексом массы тела 29.9 и диагностированным диабетом.
 
 Остальные значения, оказавшиеся за пределами межквартильного размаха, также являются реалистичными.
 
-``` {r sports outlier, echo = F}
+```{r sports outlier, echo = F}
 typed_data[typed_data$physical_activity_minutes_per_week == 751, ] %>%
   select("Age" = age, "Gender" = gender, "Smoking" = smoking_status, 
          "Alcohol Consumption per Week"=alcohol_consumption_per_week, "Physical activity, min/week"=physical_activity_minutes_per_week, 
@@ -127,10 +131,11 @@ typed_data[typed_data$physical_activity_minutes_per_week == 751, ] %>%
   align(align="center")
 ```
 
-Таким образом, в имеющемся наборе данных не было обнаружен выбросов, похожих на ошибки наблюдений. 
-Мы проверили наличие отсутствующих значений и выбросов, а также привели все переменные к надлежащим типам данных. Можем ознакомиться с базовыми описательными статистиками и приступать к проверке гипотез.
+Таким образом, в имеющемся наборе данных не было обнаружен выбросов, похожих на ошибки наблюдений.
+Мы проверили наличие отсутствующих значений и выбросов, а также привели все переменные к надлежащим типам данных.
+Можем ознакомиться с базовыми описательными статистиками и приступать к проверке гипотез.
 
-``` {r describe, echo = F}
+```{r describe, echo = F}
 typed_data %>%
   select(where(is.numeric)) %>%
   describe() %>%
@@ -146,12 +151,78 @@ typed_data %>%
 work_data <- typed_data           
 ```
 
-
 # Проверка гипотез
 
 ## Гипотеза 1
 
 ## Гипотеза 2
+
+### Зависит ли уровень инсулина в крови пациента от социо-экономических факторов в жизни пациента?
+
+Известно, что [повышенный уровень инсулина является одной из предпосылок диабета](https://pubmed.ncbi.nlm.nih.gov/11118012/). Если среди социальных факторов удастся выявить предикторы повышенного уровня инсулина, то пациенты, оказавшиеся в группе риска, получат возможность предпринять своевременные меры и предотвратить развитие заболевания.
+
+Нулевая гипотеза: социальные факторы в жизни пациента не влияют на уровень инсулина и искать предикторы нужно в другой группе параметров.
+Альтернативная гипотеза: социальные факторы оказывают эффект на уровень инсулина у пациентов.
+
+### Выбор модели и подходящих параметров
+
+Для начала определимся с выбранными предикторами.
+В рамках первой проверки построим модель со следующими предикторами: `ethnicity`, `education_level`, `income_level`, `employment_status`.
+
+```{r 1st insulin model, message=F, echo=F}
+model2_1 <- lm(insulin_level ~ ethnicity+education_level+income_level+employment_status, data=work_data)
+
+as.tibble(Anova(model2_1, type = "II")) %>%
+  rownames_to_column("Predictors") %>%
+  mutate(Predictors = c('ethnicity', 'education_level', 'income_level', 'employment_status', "Residuals")) %>%
+  flextable() %>%
+  set_caption("Зависимость уровня инсулина от социальных предикторов. ANOVA")
+```
+
+### Проверка допущений
+
+``` {r insulin model, echo = F}
+as.data.frame(vif(model2_1)) %>%
+  rownames_to_column("Predictors") %>%
+  flextable() %>%
+  set_caption("Проверка предикторов на мультиколлинеарность")
+
+par(mfrow=c(2,2))
+plot(aov(model2_1))
+```
+
+Показатель VIF оказался равен 1 для все предикторов модели, мультиколлинеарности между ними нет. 
+
+Однако, к сожалению, наша модель не удовлетворяет допущениям для проведения ANOVA, поэтому мы используем непараметрический тест, а именно проведем серию попарных сравнений с помощью тест Вилкоксона, основанного на сравнении медиан групп.
+
+### Попарный тест Вилкоксона
+
+``` {r wilcox test}
+pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$ethnicity)$p.value
+pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$education_level)$p.value
+pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$income_level)$p.value
+pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$employment_status)$p.value
+```
+Ни для одного из 4х предикторов не было выявлено значимого влияния на уровень инсулина. Уровень инсулина в крови не зависит от социальных факторов.
+
+``` {r hyp2 visual, echo = F}
+work_data %>%
+  pivot_longer(
+    cols = c(ethnicity, income_level, education_level, employment_status),
+    names_to = 'Grouping_factor',
+    values_to = "Group"
+  ) %>%
+  select(Grouping_factor, Group, insulin_level) %>%
+  ggplot(aes(x=Group, y=insulin_level, fill=Grouping_factor)) +
+  geom_boxplot() +
+  scale_fill_manual(values=c("darkred", "darkgreen", "#667028", "#1C1E12"))+
+  facet_wrap(~Grouping_factor, scales="free")+
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+
+
+```
 
 # Модели
 
