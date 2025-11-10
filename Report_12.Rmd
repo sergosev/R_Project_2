@@ -1,0 +1,182 @@
+---
+title: "Report_12.Rmd"
+output:
+  html_document:
+    highlight: zenburn
+    theme: spacelab
+    toc: TRUE
+    toc_depth: 4
+    toc_float: 
+      collapsed: yes
+      smooth_scroll: no
+    number_sections: true
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      error = FALSE,
+                      warning = FALSE,
+                      message = FALSE)
+
+#Задаем рабочую директорию
+main_dir <- dirname(rstudioapi::getSourceEditorContext()$path) 
+setwd(main_dir)
+
+#Подгружаем библиотеки
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(flextable)
+library(psych)
+library(tibble)
+library(car)
+library(readr)
+
+data <- read_csv("dataset_1_diabetes.csv")
+```
+
+# Введение
+
+## Анализ факторов риска на степень нарушения гликемического контроля в смешанной когорте из 4000 пациентов
+
+В нашем распоряжении оказался набор данных о пациентах: их клинической истории, образе жизни, биохимических показателях, социальных компонентах их жизни.
+Весьма исчерпывающий объем информации, представленный в имеющеся датасете позволяет исследовать основные предикторы развития диабета, а так же изучить распределение этого заболевания среди населения и зависимость его возникновения от разнообразных факторов.
+
+
+# Разведочный анализ данных (EDA) и коррекция 
+
+## Описание переменных
+
+В полученном датасете представлена следующая информация о пациентах:
+
+-   **Возраст и пол**
+
+-   **Сведения о социальных показателях**: национальность, уровень образования и доход, статус трудоустройства.
+    Категориальные данные.
+
+-   **Информация об образе жизни**: курение, потребление алкоголя, физическая активность, диета, количество сна, экранное время.
+
+-   **Клиническая история**: наличие диабета в семье, наличие проблем с кровяным давлением или болезней сердца и сосудов.
+
+-   **Антропометрические показатели**: ИМТ и отношение размера талии к бедрам.
+
+-   **Клинические и биохимические показатели**: кровяное давление, ЧСС, уровень холестерола, триглицеридов, глюкозы, инсулина, hba1c
+
+-   Также представлены сведения о рисках развития диабета, типе заболевания и наличии диабета в целом.
+
+## Проверка значений переменных
+
+### Работа с пропущенными значениями
+
+```{r NA handle}
+table(is.na(data))
+```
+
+Нам повезло, пропущенных значений в наборе данных нет.
+
+### Проверка типов переменных и устранение недочетов
+
+При загрузке датафрейма типы данных были установлены автоматически:
+
+```{r data types, echo = F}
+as.data.frame(sapply(data, class)) %>%
+  rownames_to_column() %>%
+  rename("Переменная" = rowname, "Тип данных" = "sapply(data, class)") %>%
+  flextable()
+```
+
+Переменные, которые являются категориальными, оказались либо строковыми, либо численными. Перед приведением их к факторам убедимся, что среди категориальных данных нет ошибок или опечаток
+
+```{r data check, echo = F}
+sapply(data[c(2:7, 13:15, 30:31)], unique)
+```
+
+С данными все хорошо, спокойно присваиваем им факторный тип.
+
+``` {r factoring, echo = F}
+typed_data <- data %>%
+  mutate(across(c(gender, ethnicity, education_level, income_level, employment_status, smoking_status, diabetes_stage),
+         as.factor),
+         
+         across(c(family_history_diabetes, hypertension_history, cardiovascular_history, diagnosed_diabetes),
+         ~ as.factor(ifelse(. == 1, "yes", "no"))))
+```
+
+### Работа с выбросами
+
+``` {r outliers 1, echo = F}
+typed_data %>%
+  select(where(is.numeric)) %>%
+  pivot_longer(cols = everything(), names_to = 'variables', values_to = 'values') %>%
+  mutate(variables = as.factor(variables)) %>%
+  group_by(variables) %>%
+  mutate(scaled_values = scale(values)) %>%
+  ungroup() %>%
+  ggplot(aes(x = variables, y = scaled_values, fill = variables)) +
+  geom_boxplot() +
+  theme_bw() +
+  theme(axis.text.x = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 12),     # Smaller title
+        legend.key.size = unit(0.5, "cm")) +
+  labs(y = "Z-standartized values", x = "")
+```
+
+Ввиду разных масштабов имеющихся числовых данных было принято решение провести Z-стандартизацию значений для упрощения восприятия визуализации выбросов, представленной выше. 
+
+В глаза бросается самый высокий выброс в переменной `physical activity`, однако если посмотреть на его значение, то станет ясно, что этот пациент занимается физ. нагрузками около 12 часов в неделю, что может быть вполне реалистично. Этот выброс соответствует пациентке 39 лет, курящей и употребляющей алкоголь в среднем 5 раз в неделю, с индексом массы тела 29.9 и диагностированным диабетом.
+
+Остальные значения, оказавшиеся за пределами межквартильного размаха, также являются реалистичными.
+
+``` {r sports outlier, echo = F}
+typed_data[typed_data$physical_activity_minutes_per_week == 751, ] %>%
+  select("Age" = age, "Gender" = gender, "Smoking" = smoking_status, 
+         "Alcohol Consumption per Week"=alcohol_consumption_per_week, "Physical activity, min/week"=physical_activity_minutes_per_week, 
+          "Diagnosed Diabetes"=diagnosed_diabetes,  "Diabetes Stage"=diabetes_stage) %>%
+  flextable() %>%
+  align(align="center")
+```
+
+Таким образом, в имеющемся наборе данных не было обнаружен выбросов, похожих на ошибки наблюдений. 
+Мы проверили наличие отсутствующих значений и выбросов, а также привели все переменные к надлежащим типам данных. Можем ознакомиться с базовыми описательными статистиками и приступать к проверке гипотез.
+
+``` {r describe, echo = F}
+typed_data %>%
+  select(where(is.numeric)) %>%
+  describe() %>%
+  rownames_to_column("Variables") %>%
+  select(Variables, mean, sd, median, min, max) %>%
+  mutate(across(where(is.numeric), ~ round(., 2))) %>%
+  flextable()
+
+typed_data %>%
+  select(where(is.factor)) %>%
+  summary()
+  
+work_data <- typed_data           
+```
+
+# Проверка гипотез
+
+## Гипотезы
+
+### Гипотеза 1
+
+### Гипотеза 2
+
+## Модели
+
+### Модель 1
+
+### Модель 2
+
+
+
+# Выводы 
+
+## Использованные пакеты 
+
+
+
