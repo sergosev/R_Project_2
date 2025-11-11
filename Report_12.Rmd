@@ -158,7 +158,7 @@ typed_data %>%
   
 work_data <- typed_data           
 ```
-
+Так же ниже представленна таблица корреляций:
 ```{r, echo = F, fig.width=40, fig.height=30, dpi=300, out.width="100%"}
 library(corrplot)
 numeric_df <- data[sapply(data, is.numeric)]
@@ -201,6 +201,7 @@ Anova(hba1c_model, type = "II")
 Проверка критериев применимости дисперсионного анализа:
 
 1. Линейность свяи
+
 ```{r линейность связи, echo = F}
 plot(hba1c_model, which = 1)  # Residuals vs Fitted
 ```
@@ -219,12 +220,12 @@ bptest(hba1c_model) # тест Бройша-Пагана
 ```
 
 4. Отсутствие мультиколлинеарности
-```{r}
+```{r, echo=FALSE}
 car::vif(hba1c_model) # VIF (Variance Inflation Factor)
 ```
 
 5. Независимость наблюдений
-```{r}
+```{r, echo=FALSE}
 lmtest::dwtest(hba1c_model)
 ```
 По вышепредставленым графикам и результатам тестов видно, что условия применимости соблюдены.
@@ -323,7 +324,8 @@ summary(model_inter)
 ```
 Проверка критериев применимости линейной регрессии:
 
-1. Линейность свяи
+1. Линейность связи
+
 ```{r, echo = F}
 plot(model_inter, which = 1)  # Residuals vs Fitted
 ```
@@ -342,7 +344,7 @@ bptest(model_inter) # тест Бройша-Пагана
 ```
 
 4. Отсутствие мультиколлинеарности
-```{r}
+```{r, echo=FALSE}
 car::vif(model_inter) # VIF (Variance Inflation Factor)
 ```
 
