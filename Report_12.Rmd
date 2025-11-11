@@ -1,0 +1,402 @@
+---
+title: "Report_12.Rmd"
+output:
+  html_document:
+    highlight: zenburn
+    theme: spacelab
+    toc: TRUE
+    toc_depth: 4
+    toc_float: 
+      collapsed: yes
+      smooth_scroll: no
+    number_sections: true
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      error = FALSE,
+                      warning = FALSE,
+                      message = FALSE)
+
+#Задаем рабочую директорию
+main_dir <- dirname(rstudioapi::getSourceEditorContext()$path) 
+setwd(main_dir)
+
+#Подгружаем библиотеки
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(flextable)
+library(psych)
+library(tibble)
+library(car)
+library(readr)
+library(corrplot)
+
+data <- read_csv("dataset_1_diabetes.csv")
+```
+
+# Введение
+
+## Анализ вклада социальных, поведентческих и медицинских факторов на степень нарушения гликемического контроля в смешанной когорте из 4000 пациентов
+
+В нашем распоряжении оказался набор данных о пациентах: их клинической истории, образе жизни, биохимических показателях, социальных компонентах их жизни.
+Весьма исчерпывающий объем информации, представленный в имеющеся датасете позволяет исследовать основные предикторы развития диабета, а так же изучить распределение этого заболевания среди населения и зависимость его возникновения от разнообразных факторов.
+
+
+# Разведочный анализ данных (EDA) и коррекция 
+
+## Описание переменных
+
+В полученном датасете представлена следующая информация о пациентах:
+
+-   **Возраст и пол**
+
+-   **Сведения о социальных показателях**: национальность, уровень образования и доход, статус трудоустройства.
+    Категориальные данные.
+
+-   **Информация об образе жизни**: курение, потребление алкоголя, физическая активность, диета, количество сна, экранное время.
+
+-   **Клиническая история**: наличие диабета в семье, наличие проблем с кровяным давлением или болезней сердца и сосудов.
+
+-   **Антропометрические показатели**: ИМТ и отношение размера талии к бедрам.
+
+-   **Клинические и биохимические показатели**: кровяное давление, ЧСС, уровень холестерола, триглицеридов, глюкозы, инсулина, hba1c
+
+-   Также представлены сведения о рисках развития диабета, типе заболевания и наличии диабета в целом.
+
+## Проверка значений переменных
+
+### Работа с пропущенными значениями
+
+```{r NA handle}
+table(is.na(data))
+```
+
+Нам повезло, пропущенных значений в наборе данных нет.
+
+### Проверка типов переменных и устранение недочетов
+
+При загрузке датафрейма типы данных были установлены автоматически:
+
+```{r data types, echo = F}
+as.data.frame(sapply(data, class)) %>%
+  rownames_to_column() %>%
+  rename("Переменная" = rowname, "Тип данных" = "sapply(data, class)") %>%
+  flextable()
+```
+
+Переменные, которые являются категориальными, оказались либо строковыми, либо численными. Перед приведением их к факторам убедимся, что среди категориальных данных нет ошибок или опечаток
+
+```{r data check, echo = F}
+sapply(data[c(2:7, 13:15, 30:31)], unique)
+```
+
+С данными все хорошо, спокойно присваиваем им факторный тип.
+
+``` {r factoring, echo = F}
+typed_data <- data %>%
+  mutate(across(c(gender, ethnicity, education_level, income_level, employment_status, smoking_status, diabetes_stage),
+         as.factor),
+         
+         across(c(family_history_diabetes, hypertension_history, cardiovascular_history, diagnosed_diabetes),
+         ~ as.factor(ifelse(. == 1, "yes", "no"))))
+```
+
+### Работа с выбросами
+
+``` {r outliers 1, echo = F}
+typed_data %>%
+  select(where(is.numeric)) %>%
+  pivot_longer(cols = everything(), names_to = 'variables', values_to = 'values') %>%
+  mutate(variables = as.factor(variables)) %>%
+  group_by(variables) %>%
+  mutate(scaled_values = scale(values)) %>%
+  ungroup() %>%
+  ggplot(aes(x = variables, y = scaled_values, fill = variables)) +
+  geom_boxplot() +
+  theme_bw() +
+  theme(axis.text.x = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 12),     # Smaller title
+        legend.key.size = unit(0.5, "cm")) +
+  labs(y = "Z-standartized values", x = "")
+```
+
+Ввиду разных масштабов имеющихся числовых данных было принято решение провести Z-стандартизацию значений для упрощения восприятия визуализации выбросов, представленной выше. 
+
+В глаза бросается самый высокий выброс в переменной `physical activity`, однако если посмотреть на его значение, то станет ясно, что этот пациент занимается физ. нагрузками около 12 часов в неделю, что может быть вполне реалистично. Этот выброс соответствует пациентке 39 лет, курящей и употребляющей алкоголь в среднем 5 раз в неделю, с индексом массы тела 29.9 и диагностированным диабетом.
+
+Остальные значения, оказавшиеся за пределами межквартильного размаха, также являются реалистичными.
+
+``` {r sports outlier, echo = F}
+typed_data[typed_data$physical_activity_minutes_per_week == 751, ] %>%
+  select("Age" = age, "Gender" = gender, "Smoking" = smoking_status, 
+         "Alcohol Consumption per Week"=alcohol_consumption_per_week, "Physical activity, min/week"=physical_activity_minutes_per_week, 
+          "Diagnosed Diabetes"=diagnosed_diabetes,  "Diabetes Stage"=diabetes_stage) %>%
+  flextable() %>%
+  align(align="center")
+```
+
+Таким образом, в имеющемся наборе данных не было обнаружен выбросов, похожих на ошибки наблюдений. 
+Мы проверили наличие отсутствующих значений и выбросов, а также привели все переменные к надлежащим типам данных. Можем ознакомиться с базовыми описательными статистиками и приступать к проверке гипотез.
+
+``` {r describe, echo = F}
+typed_data %>%
+  select(where(is.numeric)) %>%
+  describe() %>%
+  rownames_to_column("Variables") %>%
+  select(Variables, mean, sd, median, min, max) %>%
+  mutate(across(where(is.numeric), ~ round(., 2))) %>%
+  flextable()
+
+typed_data %>%
+  select(where(is.factor)) %>%
+  summary()
+  
+work_data <- typed_data           
+```
+
+```{r, echo = F, fig.width=40, fig.height=30, dpi=300, out.width="100%"}
+library(corrplot)
+numeric_df <- data[sapply(data, is.numeric)]
+
+cor_matrix <- cor(numeric_df)
+
+corrplot(cor_matrix,
+         method = "number",
+         number.cex = 2.5,
+         number.align.text = "c",        
+         tl.cex = 3.5,            
+         number.font = 3.5,
+         tl.col = "black", 
+         tl.srt = 45,
+         type = "upper",
+         mar = c(1, 1, 1, 1),
+         cl.cex = 3.5)
+```
+
+
+
+
+
+
+# Проверка гипотез
+
+## Гипотезы
+
+### Гипотеза 1
+
+H0: Средние значения HBA1c не различаются у пациентов с разным уровнем образования, полом, семейной историей диабета, физической активностью в неделю, возрастом и имт
+
+```{r, echo = F}
+hba1c_model <- lm(hba1c ~ age + bmi + physical_activity_minutes_per_week + 
+                       family_history_diabetes + gender + education_level, data = data)
+
+Anova(hba1c_model, type = "II")
+```
+
+Проверка критериев применимости дисперсионного анализа:
+
+1. Линейность свяи
+```{r линейность связи, echo = F}
+plot(hba1c_model, which = 1)  # Residuals vs Fitted
+```
+
+2. Нормальность остатков
+```{r, echo = F}
+plot(hba1c_model, which = 2)  # Q-Q plot
+shapiro.test(residuals(hba1c_model))
+```
+
+3. Постоянство дисперсий (гомоскедастичность)
+```{r, echo = F}
+plot(hba1c_model, which = 3)  # Scale-Location plot
+library(lmtest)
+bptest(hba1c_model) # тест Бройша-Пагана
+```
+
+4. Отсутствие мультиколлинеарности
+```{r}
+car::vif(hba1c_model) # VIF (Variance Inflation Factor)
+```
+
+5. Независимость наблюдений
+```{r}
+lmtest::dwtest(hba1c_model)
+```
+По вышепредставленым графикам и результатам тестов видно, что условия применимости соблюдены.
+
+Вывод: Нулевую гипотезу об отсутствии влияния для наследственности, возраста, ИМТ и физической активности имеем право отвергнуть. При этом у нас недостаточно оснований отвергнуть нулевую гипотезу для пола и уровня образования. То есть, последние два фактора в данной спецификации модели не несут статистически значимой объясняющей способности для вариации HbA1c.
+
+
+
+
+### Гипотеза 2
+
+#### Зависит ли уровень инсулина в крови пациента от социо-экономических факторов в жизни пациента?
+
+Известно, что [повышенный уровень инсулина является одной из предпосылок диабета](https://pubmed.ncbi.nlm.nih.gov/11118012/). Если среди социальных факторов удастся выявить предикторы повышенного уровня инсулина, то пациенты, оказавшиеся в группе риска, получат возможность предпринять своевременные меры и предотвратить развитие заболевания.
+
+Нулевая гипотеза: социальные факторы в жизни пациента не влияют на уровень инсулина и искать предикторы нужно в другой группе параметров.
+Альтернативная гипотеза: социальные факторы оказывают эффект на уровень инсулина у пациентов.
+
+#### Выбор модели и подходящих параметров
+
+Для начала определимся с выбранными предикторами.
+
+В рамках первой проверки построим модель со следующими предикторами: `ethnicity`, `education_level`, `income_level`, `employment_status`.
+
+```{r 1st insulin model, message=F, echo=F}
+model2_1 <- lm(insulin_level ~ ethnicity+education_level+income_level+employment_status, data=work_data)
+
+as.tibble(Anova(model2_1, type = "II")) %>%
+  rownames_to_column("Predictors") %>%
+  mutate(Predictors = c('ethnicity', 'education_level', 'income_level', 'employment_status', "Residuals")) %>%
+  flextable() %>%
+  set_caption("Зависимость уровня инсулина от социальных предикторов. ANOVA")
+```
+
+#### Проверка допущений
+
+``` {r insulin model, echo = F}
+as.data.frame(vif(model2_1)) %>%
+  rownames_to_column("Predictors") %>%
+  flextable() %>%
+  set_caption("Проверка предикторов на мультиколлинеарность")
+
+par(mfrow=c(2,2))
+plot(aov(model2_1))
+```
+
+Показатель VIF оказался равен 1 для все предикторов модели, мультиколлинеарности между ними нет. 
+
+Однако, к сожалению, наша модель не удовлетворяет допущениям для проведения ANOVA, поэтому мы используем непараметрический тест, а именно проведем серию попарных сравнений с помощью теста Вилкоксона, основанного на сравнении медиан групп.
+
+#### Попарный тест Вилкоксона
+
+``` {r wilcox test}
+pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$ethnicity)$p.value
+pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$education_level)$p.value
+pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$income_level)$p.value
+pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$employment_status)$p.value
+```
+
+Ни для одного из 4х предикторов не было выявлено значимого влияния на уровень инсулина. Уровень инсулина в крови не зависит от социальных факторов.Принимаем нулевую гипотезу.
+
+``` {r hyp2 visual, echo = F}
+work_data %>%
+  pivot_longer(
+    cols = c(ethnicity, income_level, education_level, employment_status),
+    names_to = 'Grouping_factor',
+    values_to = "Group"
+  ) %>%
+  select(Grouping_factor, Group, insulin_level) %>%
+  ggplot(aes(x=Group, y=insulin_level, fill=Grouping_factor)) +
+  geom_boxplot() +
+  scale_fill_manual(values=c("darkred", "darkgreen", "#667028", "#1C1E12"))+
+  facet_wrap(~Grouping_factor, scales="free")+
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+
+
+```
+
+## Модели
+
+### Модель 1
+
+На основании значимых основных эффектов, выявленных в ANOVA, логичным следующим шагом будет проверка наличия статистически значимых взаимодействий между предикторами, в частности, между семейным анамнезом и модифицируемыми факторами риска.
+
+Проверим конкретно взаимодействие между физической активностью в неделю и семейной историей диабета.
+
+H0: Уровень HbA1c не зависит от взаимодействия между физической активностью в неделю и семейной историей диабета.
+
+```{r, echo = F}
+model_inter <- lm(hba1c ~ age + physical_activity_minutes_per_week * family_history_diabetes, 
+                   data = data)
+
+summary(model_inter)
+```
+Проверка критериев применимости линейной регрессии:
+
+1. Линейность свяи
+```{r, echo = F}
+plot(model_inter, which = 1)  # Residuals vs Fitted
+```
+
+2. Нормальность остатков
+```{r, echo = F}
+plot(model_inter, which = 2)  # Q-Q plot
+shapiro.test(residuals(model_inter))
+```
+
+3. Постоянство дисперсий (гомоскедастичность)
+```{r, echo = F}
+plot(model_inter, which = 3)  # Scale-Location plot
+library(lmtest)
+bptest(model_inter) # тест Бройша-Пагана
+```
+
+4. Отсутствие мультиколлинеарности
+```{r}
+car::vif(model_inter) # VIF (Variance Inflation Factor)
+```
+
+5. Независимость наблюдений
+```{r}
+lmtest::dwtest(model_inter)
+```
+По вышепредставленым графикам и результатам тестов видно, что условия применимости соблюдены.
+
+Данная модель объясняет только 9% вариации HbA1c (R-squared = 0.1099). Это говорит о том, что существуют другие важные факторы, не включенные в модель.
+Влияние физической активности на уровень HbA1c одинаково для людей как с семейной историей диабета, так и без нее. Что говорит о том, что пользу от физической активности получают одинаково все группы.
+Имеем право принять гипотезу о том, что уровень HbA1c не зависит от взаимодействия между физической активностью в неделю и семейной историей диабета.
+
+
+### Модель 2
+
+Попробуем определить основные предикторы диагностированного диабета среди клинических и биохимических данных. Так как зависимая переменная является категориальной, мы будем использовать общие линейные модели.
+
+``` {r glm}
+diabetes_model <- glm(data = work_data, diagnosed_diabetes ~ bmi + systolic_bp + diastolic_bp + cholesterol_total + triglycerides + glucose_fasting + insulin_level, family="binomial")
+
+vif(diabetes_model)
+
+summary(diabetes_model)
+```
+
+Среди предикторов не было выявлено мультиколлинеарности, однако единсвенным достоверно значимым предиктором оказался уровень глюкозы в крови при анализе крови натощак.
+
+Проверим модель, основывающуюся исключительно на уровне глюкозы и влияние этого предиктора на постановку диагноза:
+
+```{r gluc model, echo = F}
+glucose_model <- glm(data=work_data, diagnosed_diabetes ~ glucose_fasting, family="binomial")
+summary(glucose_model)
+
+ggplot(data=work_data, aes(x=diagnosed_diabetes, y=glucose_fasting, fill=diagnosed_diabetes)) +
+  geom_boxplot()+
+  labs(x="Диагностированный диабет",
+       y="Уровень глюкозы в крови натощак") +
+  theme(legend.position = "none")
+```
+
+Как мы видим, у пациентов с диагностированным диабетом уровень глюкозы в среднем выше, чем у пациентов, не страдающих данным заболеванием. Построенная нами модель в теории может быть использована для прогнозирования развития диабета у пациентов, однако нам также предстоит изучить влияние не только биохимических показателей, чтобы повысить точность модели.
+
+# Выводы 
+
+В имеющихся данных не было выявлено пропущенных значений или значительных выбросов, также были проверены 2 гипотезы и построены 2 модели линейной регрессии.
+
+Было выявлено, что наследственность, возраст, ИМТ и уровень физической активности влияют на уровень hba1c у пациентов. Также нам удалось установить, что социальные факторы, такие как уровень образования, дохода, наличие работы или национальность не влияют на уровень инсулина и на эти параметры нельзя опираться при оценке риска развития диабета.
+
+Построенные модели позволяют утверждать, что уровень физической активности при взаимодействии с семейной историей диабета на оказывает значимого влияния на уровень hba1c. При этом явно существуют другие предикторы этого параметра, которые не были определены в данной работе.
+
+Также было установлено, что среди биохимических показателей на риск возникновения диабета достоверно влияет только уровень глюкозы в крови. Несмотря на то, что этот фактор можно использовать для предсказания риска развития заболевания, в дальнейшем следует изучить другие возможные его предикторы.
+
+## Использованные пакеты 
+
+
+
