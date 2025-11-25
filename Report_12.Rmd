@@ -280,7 +280,7 @@ lmtest::dwtest(hba1c_model)
 Условия применимости дисперсионного анализа в целом соблюдены.
 Нарушение нормальности остатков, выявленное тестом Шапиро-Уилка, не является критичным для выводов из-за большого объема выборки.
 
-#### Вывод
+#### Вывод гипотезы 1
 
 Вывод: Мы отвергаем нулевую гипотезу (H0) в отношении факторов возраста, ИМТ, уровня физической активности и наличия семейной истории диабета.
 Эти предикторы демонстрируют статистически значимую (p \< 0.001) связь с уровнем HbA1c после учета влияния других переменных в модели.
@@ -337,13 +337,12 @@ plot(aov(model2_1))
 
 #### Попарный тест Вилкоксона, p-values
 
-<<<<<<< HEAD
-```{r wilcox test}
+```{r wilcoxtest}
 pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$ethnicity)$p.value
 pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$education_level)$p.value
 pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$income_level)$p.value
 pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$employment_status)$p.value
-=======
+```
 ``` {r wilcox test, echo = F}
 as.data.frame(pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$ethnicity)$p.value) %>%
   flextable()
@@ -356,7 +355,7 @@ as.data.frame(pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$in
 
 as.data.frame(pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$employment_status)$p.value) %>%
   flextable()
->>>>>>> 88e294f6f64357c23eac190bda4f8534e652b246
+#>>>>>>> 88e294f6f64357c23eac190bda4f8534e652b246
 ```
 
 Ни для одного из 4х предикторов не было выявлено значимого влияния на уровень инсулина.
@@ -450,16 +449,10 @@ lmtest::dwtest(model_inter)
 
 ### Модель 2
 
-<<<<<<< HEAD
 Попробуем определить основные предикторы диагностированного диабета среди клинических и биохимических данных.
 Так как зависимая переменная является категориальной, мы будем использовать общие линейные модели.
 
-```{r glm}
-=======
-Попробуем определить основные предикторы диагностированного диабета среди клинических и биохимических данных. Так как зависимая переменная является категориальной, мы будем использовать обобщенные линейные модели.
-
 ``` {r glm, echo=F}
->>>>>>> 88e294f6f64357c23eac190bda4f8534e652b246
 diabetes_model <- glm(data = work_data, diagnosed_diabetes ~ bmi + systolic_bp + diastolic_bp + cholesterol_total + triglycerides + glucose_fasting + insulin_level, family="binomial")
 
 as.data.frame(vif(diabetes_model)) %>%
