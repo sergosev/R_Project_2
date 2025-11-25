@@ -26,7 +26,7 @@ library(psych)
 library(tibble)
 library(car)
 library(readr)
-library(patchwork)
+
 
 data <- read_csv("dataset_1_diabetes.csv")
 ```
@@ -176,7 +176,7 @@ as.tibble(Anova(model2_1, type = "II")) %>%
   rownames_to_column("Predictors") %>%
   mutate(Predictors = c('ethnicity', 'education_level', 'income_level', 'employment_status', "Residuals")) %>%
   flextable() %>%
-  set_caption("Зависимость уровня инсулина от социальных предикторов. ANOVA")
+  set_caption("Зависимость логарифмированного уровня инсулина от социальных предикторов. ANOVA")
 ```
 
 ### Проверка допущений
@@ -202,26 +202,6 @@ pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$ethnicity)$p.val
 pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$education_level)$p.value
 pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$income_level)$p.value
 pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$employment_status)$p.value
-```
-Ни для одного из 4х предикторов не было выявлено значимого влияния на уровень инсулина. Уровень инсулина в крови не зависит от социальных факторов.
-
-``` {r hyp2 visual, echo = F}
-work_data %>%
-  pivot_longer(
-    cols = c(ethnicity, income_level, education_level, employment_status),
-    names_to = 'Grouping_factor',
-    values_to = "Group"
-  ) %>%
-  select(Grouping_factor, Group, insulin_level) %>%
-  ggplot(aes(x=Group, y=insulin_level, fill=Grouping_factor)) +
-  geom_boxplot() +
-  scale_fill_manual(values=c("darkred", "darkgreen", "#667028", "#1C1E12"))+
-  facet_wrap(~Grouping_factor, scales="free")+
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        legend.position = "none")
-
-
 ```
 
 # Модели

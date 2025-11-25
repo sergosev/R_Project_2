@@ -333,15 +333,30 @@ plot(aov(model2_1))
 
 Показатель VIF оказался равен 1 для все предикторов модели, мультиколлинеарности между ними нет.
 
-Однако, к сожалению, наша модель не удовлетворяет допущениям для проведения ANOVA, поэтому мы используем непараметрический тест, а именно проведем серию попарных сравнений с помощью теста Вилкоксона, основанного на сравнении медиан групп.
+Однако, к сожалению, наша модель не удовлетворяет допущениям для проведения ANOVA. Данные распределены ненормально (QQplot), гомоскедантичности остатков не наблюдается, также на 4 графике видно смещение остатков в левую сторону. В связи с этим мы используем непараметрический тест, а именно проведем серию попарных сравнений с помощью теста Вилкоксона, основанного на сравнении медиан групп.
 
-#### Попарный тест Вилкоксона
+#### Попарный тест Вилкоксона, p-values
 
+<<<<<<< HEAD
 ```{r wilcox test}
 pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$ethnicity)$p.value
 pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$education_level)$p.value
 pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$income_level)$p.value
 pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$employment_status)$p.value
+=======
+``` {r wilcox test, echo = F}
+as.data.frame(pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$ethnicity)$p.value) %>%
+  flextable()
+
+as.data.frame(pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$education_level)$p.value) %>%
+  flextable()
+
+as.data.frame(pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$income_level)$p.value) %>%
+  flextable()
+
+as.data.frame(pairwise.wilcox.test(x = work_data$insulin_level, g = work_data$employment_status)$p.value) %>%
+  flextable()
+>>>>>>> 88e294f6f64357c23eac190bda4f8534e652b246
 ```
 
 Ни для одного из 4х предикторов не было выявлено значимого влияния на уровень инсулина.
@@ -435,15 +450,29 @@ lmtest::dwtest(model_inter)
 
 ### Модель 2
 
+<<<<<<< HEAD
 Попробуем определить основные предикторы диагностированного диабета среди клинических и биохимических данных.
 Так как зависимая переменная является категориальной, мы будем использовать общие линейные модели.
 
 ```{r glm}
+=======
+Попробуем определить основные предикторы диагностированного диабета среди клинических и биохимических данных. Так как зависимая переменная является категориальной, мы будем использовать обобщенные линейные модели.
+
+``` {r glm, echo=F}
+>>>>>>> 88e294f6f64357c23eac190bda4f8534e652b246
 diabetes_model <- glm(data = work_data, diagnosed_diabetes ~ bmi + systolic_bp + diastolic_bp + cholesterol_total + triglycerides + glucose_fasting + insulin_level, family="binomial")
 
-vif(diabetes_model)
+as.data.frame(vif(diabetes_model)) %>%
+  rownames_to_column("Predictors") %>%
+  flextable() %>%
+  set_caption("Проверка предикторов на мультиколлинеарность")
 
-summary(diabetes_model)
+
+as.data.frame(summary(diabetes_model)$coefficients) %>%
+  rename("pvalue"='Pr(>|z|)') %>%
+  mutate(pvalue = format(pvalue, scientific = TRUE, digits = 2)) %>%
+  flextable() %>%
+  set_caption("Предикторы наличия диабета")
 ```
 
 Среди предикторов не было выявлено мультиколлинеарности, однако единсвенным достоверно значимым предиктором оказался уровень глюкозы в крови при анализе крови натощак.
@@ -455,10 +484,21 @@ glucose_model <- glm(data=work_data, diagnosed_diabetes ~ glucose_fasting, famil
 summary(glucose_model)
 
 ggplot(data=work_data, aes(x=diagnosed_diabetes, y=glucose_fasting, fill=diagnosed_diabetes)) +
-  geom_boxplot()+
+  geom_boxplot(fill=c('red', 'blue'))+
   labs(x="Диагностированный диабет",
        y="Уровень глюкозы в крови натощак") +
   theme(legend.position = "none")
+
+work_data$diabetes_prediction <- predict.glm(glucose_model, type="response")
+work_data$diabetes_diagnosis <- ifelse(work_data$diagnosed_diabetes == "yes", 1, 0)
+
+ggplot() +
+  geom_point(data = work_data, aes(x = glucose_fasting, y = diabetes_diagnosis)) +
+  geom_smooth(data = work_data, aes(x = glucose_fasting, y = diabetes_diagnosis), method = glm) +
+  geom_point(data = work_data, aes(x = glucose_fasting, y = diabetes_prediction),color="red")+
+  labs(title="Predicted probability of diabetes diagnosis vs real diabetes status",
+       x = "Glucose level when fasting",
+       y = "Probability of diabetes")
 ```
 
 Как мы видим, у пациентов с диагностированным диабетом уровень глюкозы в среднем выше, чем у пациентов, не страдающих данным заболеванием.
